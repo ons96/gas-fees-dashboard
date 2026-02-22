@@ -63,6 +63,7 @@
     <script>
         // ============ CONFIGURATION ============
         
+        // Blockchair-supported chains
         const BLOCKCHAIR_CHAINS = [
             { slug: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', emoji: '₿', blockTime: '~10 min' },
             { slug: 'litecoin', name: 'Litecoin', symbol: 'LTC', emoji: 'Ł', blockTime: '~2.5 min' },
@@ -78,38 +79,60 @@
             { slug: 'groestlcoin', name: 'Groestlcoin', symbol: 'GRS', emoji: '₲', blockTime: '~1 min' }
         ];
 
-        // EVM chains with their API endpoints
-        const EVM_CHAINS = [
+        // EVM chains using PublicNode RPC (CORS-enabled, no API key needed)
+        const RPC_CHAINS = [
             { 
                 id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: 'Ξ', blockTime: '~12 sec',
-                gasLimit: 21000, 
-                apiUrl: 'https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle',
-                parseFee: (j) => {
-                    if (j.status !== '1') return null;
-                    const gwei = parseFloat(j.result.ProposeGasPrice);
-                    return gwei * 21000 * 1e-9;
-                }
+                rpcUrl: 'https://ethereum.publicnode.com', gasLimit: 21000,
+                priceId: 'ethereum'
+            },
+            { 
+                id: 'bsc', name: 'BNB Chain', symbol: 'BNB', emoji: '🟡', blockTime: '~3 sec',
+                rpcUrl: 'https://bsc.publicnode.com', gasLimit: 21000,
+                priceId: 'binancecoin'
             },
             { 
                 id: 'polygon', name: 'Polygon', symbol: 'MATIC', emoji: '🟣', blockTime: '~2 sec',
-                gasLimit: 210000,
-                apiUrl: 'https://gasstation.polygon.technology/v2',
-                parseFee: (j) => {
-                    const gwei = j.standard?.maxFeePerGas || 0;
-                    return gwei * 210000 * 1e-9;
-                }
+                rpcUrl: 'https://polygon-bor.publicnode.com', gasLimit: 210000,
+                priceId: 'matic-network'
+            },
+            { 
+                id: 'arbitrum', name: 'Arbitrum', symbol: 'ARB', emoji: '🔵', blockTime: '~0.25 sec',
+                rpcUrl: 'https://arbitrum.publicnode.com', gasLimit: 210000,
+                priceId: 'arbitrum'
+            },
+            { 
+                id: 'optimism', name: 'Optimism', symbol: 'OP', emoji: '🔴', blockTime: '~2 sec',
+                rpcUrl: 'https://optimism.publicnode.com', gasLimit: 21000,
+                priceId: 'optimism'
+            },
+            { 
+                id: 'base', name: 'Base', symbol: 'BASE', emoji: '🔷', blockTime: '~2 sec',
+                rpcUrl: 'https://base.publicnode.com', gasLimit: 210000,
+                priceId: 'base'
             },
             { 
                 id: 'avalanche', name: 'Avalanche', symbol: 'AVAX', emoji: '🔺', blockTime: '~2 sec',
-                gasLimit: 21000,
-                apiUrl: 'https://api.snowtrace.io/api?module=gastracker&action=gasoracle',
-                parseFee: (j) => {
-                    if (j.status !== '1') return null;
-                    const navax = parseFloat(j.result.ProposeGasPrice);
-                    return navax * 21000 * 1e-9;
-                }
+                rpcUrl: 'https://avalanche-c-chain.publicnode.com', gasLimit: 21000,
+                priceId: 'avalanche-2'
+            },
+            { 
+                id: 'celo', name: 'Celo', symbol: 'CELO', emoji: '🌱', blockTime: '~5 sec',
+                rpcUrl: 'https://celo.publicnode.com', gasLimit: 200000,
+                priceId: 'celo'
+            },
+            { 
+                id: 'gnosis', name: 'Gnosis', symbol: 'GNO', emoji: '🔶', blockTime: '~5 sec',
+                rpcUrl: 'https://gnosis.publicnode.com', gasLimit: 21000,
+                priceId: 'gnosis'
             }
         ];
+
+        // Non-EVM chains
+        const ALGORAND = {
+            id: 'algorand', name: 'Algorand', symbol: 'ALGO', emoji: 'Ⓐ', blockTime: '~4 sec',
+            priceId: 'algorand'
+        };
 
         // ============ STATE ============
         let data = [];
@@ -119,48 +142,49 @@
         let autoRefreshInterval = null;
         let prices = {};
 
-        // Cache with localStorage
-        const CACHE_KEY = 'gasfees_cache';
-        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        // ============ PERMANENT CACHE (no TTL - keeps values forever) ============
+        const CACHE_KEY = 'gasfees_cache_v2';
 
         function getCache() {
             try {
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (!cached) return null;
-                const parsed = JSON.parse(cached);
-                if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
-                return parsed.data;
+                return JSON.parse(cached);
             } catch(e) {
                 return null;
             }
         }
 
-        function setCache(fees) {
+        function setCache(fees, timestamp) {
             try {
                 localStorage.setItem(CACHE_KEY, JSON.stringify({
-                    timestamp: Date.now(),
+                    timestamp: timestamp || Date.now(),
                     data: fees
                 }));
             } catch(e) {}
         }
 
-        // Merge new fees with cached fees (preserve values on failure)
+        // Merge new fees with cached fees (preserve values on failure - NO TTL)
         function mergeWithCache(newFees) {
-            const cached = getCache() || {};
+            const cached = getCache();
+            const cachedData = cached?.data || {};
             const result = {};
             
             for (const [key, value] of Object.entries(newFees)) {
-                if (value.avg != null && value.avg > 0) {
-                    result[key] = value;
-                } else if (cached[key]) {
-                    result[key] = { ...cached[key], stale: true };
+                // Use new value if valid (> 0 and reasonable)
+                if (value.avg != null && value.avg > 0 && value.avg < 1000) {
+                    result[key] = { ...value, cachedAt: Date.now() };
+                } else if (cachedData[key]?.avg > 0) {
+                    // Fall back to cached value
+                    result[key] = { ...cachedData[key], stale: true };
                 } else {
                     result[key] = value;
                 }
             }
             
-            for (const [key, value] of Object.entries(cached)) {
-                if (!result[key]) {
+            // Preserve any cached chains not in new results
+            for (const [key, value] of Object.entries(cachedData)) {
+                if (!result[key] && value.avg > 0) {
                     result[key] = { ...value, stale: true };
                 }
             }
@@ -191,7 +215,8 @@
             try {
                 const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 
                              'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network',
-                             'avalanche-2', 'solana'];
+                             'binancecoin', 'avalanche-2', 'arbitrum', 'optimism', 'base', 'celo', 'gnosis',
+                             'solana', 'algorand'];
                 const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
                 prices = await r.json();
                 return prices;
@@ -231,14 +256,11 @@
                         med = (rawMedFee / 100) * price;
                     }
                     
+                    // Sanity check
                     if (avg > 0 && med > 0 && avg > med * 100) avg = med;
+                    if (med === 0) med = avg;
                     
-                    fees[c.symbol] = {
-                        ...c,
-                        avg,
-                        med,
-                        source: 'Blockchair'
-                    };
+                    fees[c.symbol] = { ...c, avg, med, source: 'Blockchair' };
                 }
             } catch(e) {
                 console.warn('Blockchair error:', e);
@@ -246,31 +268,40 @@
             return fees;
         }
 
-        async function getEVMChain(chain) {
+        // Fetch gas price from RPC endpoint
+        async function getRPCGasPrice(chain) {
             try {
-                const r = await fetch(chain.apiUrl);
+                const r = await fetch(chain.rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method: 'eth_gasPrice',
+                        params: []
+                    })
+                });
                 const j = await r.json();
+                if (!j.result) return null;
                 
-                const ethAmount = chain.parseFee(j);
-                if (ethAmount == null || ethAmount === 0) return null;
+                // Result is hex wei, convert to ETH
+                const wei = parseInt(j.result, 16);
+                const ethAmount = (wei * chain.gasLimit) / 1e18;
                 
-                const priceMap = {
-                    'ethereum': 'ethereum',
-                    'polygon': 'matic-network',
-                    'avalanche': 'avalanche-2'
-                };
-                const price = prices[priceMap[chain.id]]?.usd || 1;
+                // Get price and convert to USD
+                const price = prices[chain.priceId]?.usd || 0;
+                if (price === 0) return null;
+                
                 const fee = ethAmount * price;
                 
                 return {
                     ...chain,
                     avg: fee,
                     med: fee,
-                    source: chain.id === 'ethereum' ? 'Etherscan' : 
-                            chain.id === 'polygon' ? 'Polygon' : 'Snowtrace'
+                    source: 'PublicNode'
                 };
             } catch(e) {
-                console.warn(`${chain.id} error:`, e);
+                console.warn(`${chain.id} RPC error:`, e);
                 return null;
             }
         }
@@ -301,6 +332,28 @@
             }
         }
 
+        async function getAlgorand() {
+            try {
+                const r = await fetch('https://mainnet-api.algonode.cloud/v2/transactions/params');
+                const j = await r.json();
+                // Fee is in microAlgos (1 ALGO = 1,000,000 microAlgos)
+                const microAlgos = j['min-fee'] || j['fee'] || 1000;
+                const algoAmount = microAlgos / 1e6;
+                
+                const price = prices['algorand']?.usd || 0.20;
+                const fee = algoAmount * price;
+                
+                return { 
+                    ...ALGORAND,
+                    avg: fee, med: fee, 
+                    source: 'AlgoNode' 
+                };
+            } catch(e) {
+                console.warn('Algorand error:', e);
+                return null;
+            }
+        }
+
         // ============ MAIN LOAD ============
 
         async function load() {
@@ -312,24 +365,29 @@
             try {
                 await getPrices();
                 
-                const [blockchairFees, ...evmResults] = await Promise.all([
+                // Fetch all sources in parallel
+                const [blockchairFees, ...rpcResults] = await Promise.all([
                     getBlockchair(),
-                    ...EVM_CHAINS.map(c => getEVMChain(c)),
-                    getSolana()
+                    ...RPC_CHAINS.map(c => getRPCGasPrice(c)),
+                    getSolana(),
+                    getAlgorand()
                 ]);
                 
+                // Build new fees object
                 let newFees = { ...blockchairFees };
                 
-                evmResults.forEach(r => {
-                    if (r && r.symbol) {
+                rpcResults.forEach(r => {
+                    if (r && r.symbol && r.avg > 0) {
                         newFees[r.symbol] = r;
                     }
                 });
                 
+                // Merge with cache (preserves old values on failure)
                 const mergedFees = mergeWithCache(newFees);
                 setCache(mergedFees);
                 
-                data = Object.values(mergedFees).filter(c => c.name);
+                // Convert to array and sort
+                data = Object.values(mergedFees).filter(c => c.name && c.avg > 0);
                 data.sort((a, b) => (a.avg || 999) - (b.avg || 999));
                 
                 render();
@@ -343,8 +401,8 @@
         }
 
         function updateTimestamp() {
-            const cached = getCache();
             const staleCount = data.filter(c => c.stale).length;
+            const cacheInfo = getCache();
             let status = `${data.length} chains • Updated ${new Date().toLocaleTimeString()}`;
             if (staleCount > 0) {
                 status += ` (${staleCount} cached)`;
@@ -362,7 +420,7 @@
             document.getElementById('table').innerHTML = filtered.map((c, i) => `
                 <tr class="border-t border-slate-700/50 hover:bg-slate-700/30 ${c.stale ? 'opacity-60' : ''}">
                     <td class="px-4 py-3 text-slate-500 text-xs">${i + 1}</td>
-                    <td class="px-4 py-3 font-medium whitespace-nowrap">${c.emoji} ${c.name} <span class="text-slate-500 text-xs">${c.symbol}</span>${c.stale ? ' <span class=\"text-amber-500 text-xs\">(cached)</span>' : ''}</td>
+                    <td class="px-4 py-3 font-medium whitespace-nowrap">${c.emoji} ${c.name} <span class="text-slate-500 text-xs">${c.symbol}</span>${c.stale ? ' <span class="text-amber-500 text-xs">(cached)</span>' : ''}</td>
                     <td class="px-4 py-3 text-right ${colorClass(c.avg)} whitespace-nowrap font-mono">${fmt(c.avg)}</td>
                     <td class="px-4 py-3 text-right ${colorClass(c.med)} whitespace-nowrap font-mono">${fmt(c.med)}</td>
                     <td class="px-4 py-3 text-center text-slate-400 whitespace-nowrap text-xs">${c.blockTime}</td>
@@ -421,11 +479,12 @@
         
         // Load cached data immediately if available
         const cached = getCache();
-        if (cached) {
-            data = Object.values(cached).filter(c => c.name);
+        if (cached?.data) {
+            data = Object.values(cached.data).filter(c => c.name && c.avg > 0);
             data.sort((a, b) => (a.avg || 999) - (b.avg || 999));
             render();
-            document.getElementById('status').textContent = `${data.length} chains (from cache) • Refreshing...`;
+            const age = Math.round((Date.now() - cached.timestamp) / 1000);
+            document.getElementById('status').textContent = `${data.length} chains (from cache, ${age}s old) • Refreshing...`;
         }
         
         load();
