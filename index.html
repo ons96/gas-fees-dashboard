@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GasFees Sorted - Cheapest Blockchains</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; }
+        .loader { border: 3px solid #444; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 min-h-screen p-4">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-bold">Cheapest Blockchains</h1>
+                <p class="text-slate-400 text-sm">Real-time transaction fees in USD • Sorted by avg fee</p>
+            </div>
+            <div class="text-right flex flex-col items-end gap-2">
+                <div id="status" class="text-xs text-slate-500">Ready</div>
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                        <input type="checkbox" id="autoRefresh" class="w-4 h-4 rounded">
+                        <span>Auto (60s)</span>
+                    </label>
+                    <button id="refreshBtn" class="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed px-4 py-2 rounded text-sm transition-colors">Refresh</button>
+                </div>
+            </div>
+        </div>
+
+        <input type="text" id="search" placeholder="Search by name or symbol..." class="w-full bg-slate-800 border border-slate-700 rounded px-4 py-2 mb-4">
+
+        <div class="bg-slate-800 rounded-lg overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-700/50 text-slate-400 text-xs uppercase">
+                    <tr>
+                        <th class="px-4 py-3 text-left">#</th>
+                        <th class="px-4 py-3 text-left">Chain</th>
+                        <th class="px-4 py-3 text-right">Avg Fee</th>
+                        <th class="px-4 py-3 text-right">Median Fee</th>
+                        <th class="px-4 py-3 text-center">Block Time</th>
+                        <th class="px-4 py-3 text-center">Source</th>
+                    </tr>
+                </thead>
+                <tbody id="table"></tbody>
+            </table>
+            <div id="loading" class="py-10 text-center hidden">
+                <div class="loader inline-block"></div>
+                <p class="text-slate-500 mt-2">Fetching fees from multiple sources...</p>
+            </div>
+        </div>
+        
+        <div class="mt-4 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span><span class="text-emerald-400">●</span> &lt;$0.01</span>
+            <span><span class="text-yellow-400">●</span> $0.01-$0.10</span>
+            <span><span class="text-red-400">●</span> &gt;$0.10</span>
+            <span class="ml-auto">Block time = typical confirmation wait</span>
+        </div>
+    </div>
+
+    <script>
+        // ============ CONFIGURATION ============
+        
+        const BLOCKCHAIR_CHAINS = [
+            { slug: 'bitcoin', name: 'Bitcoin', symbol: 'BTC', emoji: '₿', blockTime: '~10 min' },
+            { slug: 'litecoin', name: 'Litecoin', symbol: 'LTC', emoji: 'Ł', blockTime: '~2.5 min' },
+            { slug: 'dogecoin', name: 'Dogecoin', symbol: 'DOGE', emoji: '🐕', blockTime: '~1 min' },
+            { slug: 'bitcoin-cash', name: 'Bitcoin Cash', symbol: 'BCH', emoji: '฿', blockTime: '~10 min' },
+            { slug: 'dash', name: 'Dash', symbol: 'DASH', emoji: 'D', blockTime: '~2.5 min' },
+            { slug: 'ripple', name: 'XRP', symbol: 'XRP', emoji: '✕', blockTime: '~3-5 sec' },
+            { slug: 'stellar', name: 'Stellar', symbol: 'XLM', emoji: '*', blockTime: '~5 sec' },
+            { slug: 'monero', name: 'Monero', symbol: 'XMR', emoji: 'ɱ', blockTime: '~2 min', manual: true },
+            { slug: 'cardano', name: 'Cardano', symbol: 'ADA', emoji: '₳', blockTime: '~20 sec', manual: true },
+            { slug: 'zcash', name: 'Zcash', symbol: 'ZEC', emoji: 'ⓩ', blockTime: '~2.5 min' },
+            { slug: 'ecash', name: 'eCash', symbol: 'XEC', emoji: 'ₑ', blockTime: '~10 min', manual: true },
+            { slug: 'groestlcoin', name: 'Groestlcoin', symbol: 'GRS', emoji: '₲', blockTime: '~1 min' }
+        ];
+
+        // EVM chains with their API endpoints
+        const EVM_CHAINS = [
+            { 
+                id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: 'Ξ', blockTime: '~12 sec',
+                gasLimit: 21000, 
+                apiUrl: 'https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle',
+                parseFee: (j) => {
+                    if (j.status !== '1') return null;
+                    const gwei = parseFloat(j.result.ProposeGasPrice);
+                    return gwei * 21000 * 1e-9;
+                }
+            },
+            { 
+                id: 'polygon', name: 'Polygon', symbol: 'MATIC', emoji: '🟣', blockTime: '~2 sec',
+                gasLimit: 210000,
+                apiUrl: 'https://gasstation.polygon.technology/v2',
+                parseFee: (j) => {
+                    const gwei = j.standard?.maxFeePerGas || 0;
+                    return gwei * 210000 * 1e-9;
+                }
+            },
+            { 
+                id: 'avalanche', name: 'Avalanche', symbol: 'AVAX', emoji: '🔺', blockTime: '~2 sec',
+                gasLimit: 21000,
+                apiUrl: 'https://api.snowtrace.io/api?module=gastracker&action=gasoracle',
+                parseFee: (j) => {
+                    if (j.status !== '1') return null;
+                    const navax = parseFloat(j.result.ProposeGasPrice);
+                    return navax * 21000 * 1e-9;
+                }
+            }
+        ];
+
+        // ============ STATE ============
+        let data = [];
+        let loading = false;
+        let lastRefreshTime = 0;
+        const COOLDOWN_MS = 30000;
+        let autoRefreshInterval = null;
+        let prices = {};
+
+        // Cache with localStorage
+        const CACHE_KEY = 'gasfees_cache';
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+        function getCache() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (!cached) return null;
+                const parsed = JSON.parse(cached);
+                if (Date.now() - parsed.timestamp > CACHE_TTL) return null;
+                return parsed.data;
+            } catch(e) {
+                return null;
+            }
+        }
+
+        function setCache(fees) {
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify({
+                    timestamp: Date.now(),
+                    data: fees
+                }));
+            } catch(e) {}
+        }
+
+        // Merge new fees with cached fees (preserve values on failure)
+        function mergeWithCache(newFees) {
+            const cached = getCache() || {};
+            const result = {};
+            
+            for (const [key, value] of Object.entries(newFees)) {
+                if (value.avg != null && value.avg > 0) {
+                    result[key] = value;
+                } else if (cached[key]) {
+                    result[key] = { ...cached[key], stale: true };
+                } else {
+                    result[key] = value;
+                }
+            }
+            
+            for (const [key, value] of Object.entries(cached)) {
+                if (!result[key]) {
+                    result[key] = { ...value, stale: true };
+                }
+            }
+            
+            return result;
+        }
+
+        // ============ UTILITIES ============
+        
+        const colorClass = (v) => {
+            if (v == null || isNaN(v)) return 'text-slate-500';
+            if (v < 0.01) return 'text-emerald-400';
+            if (v < 0.10) return 'text-yellow-400';
+            return 'text-red-400';
+        };
+
+        const fmt = (v) => {
+            if (v == null || isNaN(v)) return 'N/A';
+            if (v === 0) return '$0.00';
+            if (v < 0.00000001) return '$' + v.toExponential(2);
+            if (v < 0.01) return '$' + v.toFixed(Math.min(12, Math.max(6, Math.ceil(-Math.log10(v)) + 2)));
+            return new Intl.NumberFormat('en', {style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4}).format(v);
+        };
+
+        // ============ DATA FETCHERS ============
+
+        async function getPrices() {
+            try {
+                const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 
+                             'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network',
+                             'avalanche-2', 'solana'];
+                const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
+                prices = await r.json();
+                return prices;
+            } catch(e) {
+                console.warn('CoinGecko failed:', e);
+                return {};
+            }
+        }
+
+        async function getBlockchair() {
+            const fees = {};
+            try {
+                const r = await fetch('https://api.blockchair.com/stats');
+                const j = await r.json();
+                
+                for (let c of BLOCKCHAIR_CHAINS) {
+                    const d = j.data[c.slug]?.data;
+                    if (!d) continue;
+                    
+                    let avg = parseFloat(d.average_transaction_fee_usd_24h) || 0;
+                    let med = parseFloat(d.median_transaction_fee_usd_24h) || 0;
+                    const rawAvgFee = parseFloat(d.average_transaction_fee_24h) || 0;
+                    const rawMedFee = parseFloat(d.median_transaction_fee_24h) || 0;
+                    
+                    const cgId = c.slug === 'ripple' ? 'ripple' : c.slug === 'bitcoin-cash' ? 'bitcoin-cash' : c.slug;
+                    const price = prices[cgId]?.usd || d.market_price_usd || 1;
+                    
+                    if (c.slug === 'monero') {
+                        const satPerByte = parseFloat(d.suggested_transaction_fee_per_byte_sat) || 0;
+                        avg = (satPerByte * 2000) / 1e12 * price;
+                        med = avg;
+                    } else if (c.slug === 'cardano') {
+                        avg = 0.166 * price;
+                        med = avg;
+                    } else if (c.slug === 'ecash') {
+                        avg = (rawAvgFee / 100) * price;
+                        med = (rawMedFee / 100) * price;
+                    }
+                    
+                    if (avg > 0 && med > 0 && avg > med * 100) avg = med;
+                    
+                    fees[c.symbol] = {
+                        ...c,
+                        avg,
+                        med,
+                        source: 'Blockchair'
+                    };
+                }
+            } catch(e) {
+                console.warn('Blockchair error:', e);
+            }
+            return fees;
+        }
+
+        async function getEVMChain(chain) {
+            try {
+                const r = await fetch(chain.apiUrl);
+                const j = await r.json();
+                
+                const ethAmount = chain.parseFee(j);
+                if (ethAmount == null || ethAmount === 0) return null;
+                
+                const priceMap = {
+                    'ethereum': 'ethereum',
+                    'polygon': 'matic-network',
+                    'avalanche': 'avalanche-2'
+                };
+                const price = prices[priceMap[chain.id]]?.usd || 1;
+                const fee = ethAmount * price;
+                
+                return {
+                    ...chain,
+                    avg: fee,
+                    med: fee,
+                    source: chain.id === 'ethereum' ? 'Etherscan' : 
+                            chain.id === 'polygon' ? 'Polygon' : 'Snowtrace'
+                };
+            } catch(e) {
+                console.warn(`${chain.id} error:`, e);
+                return null;
+            }
+        }
+
+        async function getSolana() {
+            try {
+                const r = await fetch('https://solanacompass.com/api/fees');
+                const j = await r.json();
+                const mainnet = j['1'];
+                if (!mainnet) return null;
+                
+                const avgPriority = (mainnet.avg || 0) / 1e6;
+                const baseFee = 5000;
+                const totalLamports = avgPriority + baseFee;
+                const solAmount = totalLamports / 1e9;
+                
+                const price = prices['solana']?.usd || 180;
+                const fee = solAmount * price;
+                
+                return { 
+                    name: 'Solana', symbol: 'SOL', emoji: '◎', 
+                    avg: fee, med: fee, 
+                    blockTime: '~0.4 sec', source: 'SolanaCompass' 
+                };
+            } catch(e) {
+                console.warn('Solana error:', e);
+                return null;
+            }
+        }
+
+        // ============ MAIN LOAD ============
+
+        async function load() {
+            if (loading) return;
+            loading = true;
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('status').textContent = 'Fetching...';
+            
+            try {
+                await getPrices();
+                
+                const [blockchairFees, ...evmResults] = await Promise.all([
+                    getBlockchair(),
+                    ...EVM_CHAINS.map(c => getEVMChain(c)),
+                    getSolana()
+                ]);
+                
+                let newFees = { ...blockchairFees };
+                
+                evmResults.forEach(r => {
+                    if (r && r.symbol) {
+                        newFees[r.symbol] = r;
+                    }
+                });
+                
+                const mergedFees = mergeWithCache(newFees);
+                setCache(mergedFees);
+                
+                data = Object.values(mergedFees).filter(c => c.name);
+                data.sort((a, b) => (a.avg || 999) - (b.avg || 999));
+                
+                render();
+                updateTimestamp();
+            } catch(e) {
+                document.getElementById('status').textContent = 'Error: ' + e.message;
+            } finally {
+                loading = false;
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function updateTimestamp() {
+            const cached = getCache();
+            const staleCount = data.filter(c => c.stale).length;
+            let status = `${data.length} chains • Updated ${new Date().toLocaleTimeString()}`;
+            if (staleCount > 0) {
+                status += ` (${staleCount} cached)`;
+            }
+            document.getElementById('status').textContent = status;
+        }
+
+        function render() {
+            const search = document.getElementById('search').value.toLowerCase();
+            const filtered = data.filter(c => 
+                c.name.toLowerCase().includes(search) || 
+                c.symbol.toLowerCase().includes(search)
+            );
+            
+            document.getElementById('table').innerHTML = filtered.map((c, i) => `
+                <tr class="border-t border-slate-700/50 hover:bg-slate-700/30 ${c.stale ? 'opacity-60' : ''}">
+                    <td class="px-4 py-3 text-slate-500 text-xs">${i + 1}</td>
+                    <td class="px-4 py-3 font-medium whitespace-nowrap">${c.emoji} ${c.name} <span class="text-slate-500 text-xs">${c.symbol}</span>${c.stale ? ' <span class=\"text-amber-500 text-xs\">(cached)</span>' : ''}</td>
+                    <td class="px-4 py-3 text-right ${colorClass(c.avg)} whitespace-nowrap font-mono">${fmt(c.avg)}</td>
+                    <td class="px-4 py-3 text-right ${colorClass(c.med)} whitespace-nowrap font-mono">${fmt(c.med)}</td>
+                    <td class="px-4 py-3 text-center text-slate-400 whitespace-nowrap text-xs">${c.blockTime}</td>
+                    <td class="px-4 py-3 text-center text-slate-500 text-xs">${c.source}</td>
+                </tr>
+            `).join('');
+        }
+
+        function handleRefresh() {
+            const now = Date.now();
+            const timeSinceLast = now - lastRefreshTime;
+            
+            if (timeSinceLast < COOLDOWN_MS) {
+                const remaining = Math.ceil((COOLDOWN_MS - timeSinceLast) / 1000);
+                document.getElementById('status').textContent = `Cooldown: ${remaining}s`;
+                return;
+            }
+            
+            lastRefreshTime = now;
+            updateButtonState();
+            load();
+        }
+
+        function updateButtonState() {
+            const btn = document.getElementById('refreshBtn');
+            const now = Date.now();
+            const timeSinceLast = now - lastRefreshTime;
+            
+            if (timeSinceLast < COOLDOWN_MS) {
+                const remaining = Math.ceil((COOLDOWN_MS - timeSinceLast) / 1000);
+                btn.disabled = true;
+                btn.textContent = `Wait ${remaining}s`;
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Refresh';
+            }
+        }
+
+        document.getElementById('autoRefresh').addEventListener('change', function() {
+            if (this.checked) {
+                autoRefreshInterval = setInterval(load, 60000);
+            } else if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        });
+
+        setInterval(updateButtonState, 1000);
+        
+        setInterval(() => {
+            if (data.length > 0 && !loading) updateTimestamp();
+        }, 5000);
+
+        document.getElementById('refreshBtn').onclick = handleRefresh;
+        document.getElementById('search').oninput = render;
+        
+        // Load cached data immediately if available
+        const cached = getCache();
+        if (cached) {
+            data = Object.values(cached).filter(c => c.name);
+            data.sort((a, b) => (a.avg || 999) - (b.avg || 999));
+            render();
+            document.getElementById('status').textContent = `${data.length} chains (from cache) • Refreshing...`;
+        }
+        
+        load();
+    </script>
+</body>
+</html>
