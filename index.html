@@ -81,6 +81,27 @@
 
         // EVM chains using PublicNode RPC (CORS-enabled, no API key needed)
         const RPC_CHAINS = [
+            // Chains using our new Vercel backend with Moralis
+            { 
+                id: 'polkadot', name: 'Polkadot', symbol: 'DOT', emoji: '⚫', blockTime: '~6 sec',
+                useBackend: true, gasLimit: 1, // backend handles fee format
+                priceId: 'polkadot'
+            },
+            { 
+                id: 'cronos', name: 'Cronos', symbol: 'CRO', emoji: '⏱️', blockTime: '~5 sec',
+                useBackend: true, gasLimit: 21000,
+                priceId: 'crypto-com-chain'
+            },
+            { 
+                id: 'fantom', name: 'Fantom', symbol: 'FTM', emoji: '👻', blockTime: '~1 sec',
+                useBackend: true, gasLimit: 21000,
+                priceId: 'fantom'
+            },
+            { 
+                id: 'moonbeam', name: 'Moonbeam', symbol: 'GLMR', emoji: '🌙', blockTime: '~12 sec',
+                useBackend: true, gasLimit: 21000,
+                priceId: 'moonbeam'
+            },
             { 
                 id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: 'Ξ', blockTime: '~12 sec',
                 rpcUrl: 'https://ethereum.publicnode.com', gasLimit: 21000,
@@ -271,22 +292,35 @@
         // Fetch gas price from RPC endpoint
         async function getRPCGasPrice(chain) {
             try {
-                const r = await fetch(chain.rpcUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        id: 1,
-                        method: 'eth_gasPrice',
-                        params: []
-                    })
-                });
-                const j = await r.json();
-                if (!j.result) return null;
+                let r, j, wei, ethAmount;
                 
-                // Result is hex wei, convert to ETH
-                const wei = parseInt(j.result, 16);
-                const ethAmount = (wei * chain.gasLimit) / 1e18;
+                if (chain.useBackend) {
+                    r = await fetch(`/api/gas?chain=${chain.id}`);
+                    j = await r.json();
+                    if (!j.gasPriceWei) return null;
+                    
+                    wei = parseInt(j.gasPriceWei);
+                    if (chain.id === 'polkadot') {
+                        ethAmount = wei / 1e10; // DOT uses 10 decimals
+                    } else {
+                        ethAmount = (wei * chain.gasLimit) / 1e18;
+                    }
+                } else {
+                    r = await fetch(chain.rpcUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: 1,
+                            method: 'eth_gasPrice',
+                            params: []
+                        })
+                    });
+                    j = await r.json();
+                if (!j.result) return null;
+                    wei = parseInt(j.result, 16);
+                    ethAmount = (wei * chain.gasLimit) / 1e18;
+                }
                 
                 // Get price and convert to USD
                 const price = prices[chain.priceId]?.usd || 0;
@@ -298,7 +332,7 @@
                     ...chain,
                     avg: fee,
                     med: fee,
-                    source: 'PublicNode'
+                    source: chain.useBackend ? 'Moralis' : 'PublicNode'
                 };
             } catch(e) {
                 console.warn(`${chain.id} RPC error:`, e);
