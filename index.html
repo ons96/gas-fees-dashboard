@@ -36,12 +36,12 @@
             <table class="w-full text-sm">
                 <thead class="bg-slate-700/50 text-slate-400 text-xs uppercase">
                     <tr>
-                        <th class="px-4 py-3 text-left">#</th>
-                        <th class="px-4 py-3 text-left">Chain</th>
-                        <th class="px-4 py-3 text-right">Avg Fee</th>
-                        <th class="px-4 py-3 text-right">Median Fee</th>
-                        <th class="px-4 py-3 text-center">Block Time</th>
-                        <th class="px-4 py-3 text-center">Source</th>
+                        <th class="px-4 py-3 text-left w-12">#</th>
+                        <th class="px-4 py-3 text-left cursor-pointer hover:bg-slate-600 transition-colors select-none" onclick="setSort('name')">Chain <span id="sort-name" class="text-slate-500"></span></th>
+                        <th class="px-4 py-3 text-right cursor-pointer hover:bg-slate-600 transition-colors select-none" onclick="setSort('avg')">Avg Fee <span id="sort-avg" class="text-slate-300">▲</span></th>
+                        <th class="px-4 py-3 text-right cursor-pointer hover:bg-slate-600 transition-colors select-none" onclick="setSort('med')">Median Fee <span id="sort-med" class="text-slate-500"></span></th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-600 transition-colors select-none" onclick="setSort('blockTimeSec')">Block Time <span id="sort-blockTimeSec" class="text-slate-500"></span></th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-600 transition-colors select-none" onclick="setSort('source')">Source <span id="sort-source" class="text-slate-500"></span></th>
                     </tr>
                 </thead>
                 <tbody id="table"></tbody>
@@ -177,6 +177,7 @@
         let autoRefreshInterval = null;
         let prices = {};
 
+        let currentSort = { col: 'avg', asc: true };
         // ============ PERMANENT CACHE (no TTL - keeps values forever) ============
         const CACHE_KEY = 'gasfees_cache_v3';
 
@@ -224,6 +225,18 @@
                 }
             }
             
+            // Add numeric blockTime for sorting
+            for (const key of Object.keys(result)) {
+                if (result[key].blockTime && !result[key].blockTimeSec) {
+                    const s = result[key].blockTime.toLowerCase();
+                    let val = parseFloat(s.replace(/[^0-9.]/g, ''));
+                    if (isNaN(val)) val = 999999;
+                    if (s.includes('min')) val *= 60;
+                    if (s.includes('hour')) val *= 3600;
+                    result[key].blockTimeSec = val;
+                }
+            }
+
             return result;
         }
 
@@ -447,7 +460,7 @@
                 
                 // Convert to array and sort
                 data = Object.values(mergedFees).filter(c => c.name && c.avg > 0);
-                data.sort((a, b) => (a.avg || 999) - (b.avg || 999));
+
                 
                 render();
                 updateTimestamp();
@@ -469,13 +482,46 @@
             document.getElementById('status').textContent = status;
         }
 
+        function setSort(col) {
+            if (currentSort.col === col) {
+                currentSort.asc = !currentSort.asc;
+            } else {
+                currentSort.col = col;
+                currentSort.asc = true;
+            }
+            
+            // Update UI
+            ['name', 'avg', 'med', 'blockTimeSec', 'source'].forEach(c => {
+                const el = document.getElementById(`sort-${c}`);
+                if (el) {
+                    el.textContent = c === currentSort.col ? (currentSort.asc ? '▲' : '▼') : '';
+                    el.className = c === currentSort.col ? 'text-slate-300' : 'text-slate-500';
+                }
+            });
+            
+            render();
+        }
         function render() {
             const search = document.getElementById('search').value.toLowerCase();
-            const filtered = data.filter(c => 
+            let filtered = data.filter(c => 
                 c.name.toLowerCase().includes(search) || 
                 c.symbol.toLowerCase().includes(search)
             );
             
+            filtered.sort((a, b) => {
+                let valA = a[currentSort.col];
+                let valB = b[currentSort.col];
+                
+                // Handle null/undefined values by pushing them to the bottom
+                if (valA == null) return 1;
+                if (valB == null) return -1;
+
+                if (typeof valA === 'string') {
+                    return currentSort.asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                } else {
+                    return currentSort.asc ? valA - valB : valB - valA;
+                }
+            });
             document.getElementById('table').innerHTML = filtered.map((c, i) => `
                 <tr class="border-t border-slate-700/50 hover:bg-slate-700/30 ${c.stale ? 'opacity-60' : ''}">
                     <td class="px-4 py-3 text-slate-500 text-xs">${i + 1}</td>
@@ -540,7 +586,7 @@
         const cached = getCache();
         if (cached?.data) {
             data = Object.values(cached.data).filter(c => c.name && c.avg > 0);
-            data.sort((a, b) => (a.avg || 999) - (b.avg || 999));
+
             render();
             const age = Math.round((Date.now() - cached.timestamp) / 1000);
             document.getElementById('status').textContent = `${data.length} chains (from cache, ${age}s old) • Refreshing...`;
