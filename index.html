@@ -83,44 +83,39 @@
         const RPC_CHAINS = [
             // Chains using our new Vercel backend with Moralis
             { 
-                id: 'polkadot', name: 'Polkadot', symbol: 'DOT', emoji: '⚫', blockTime: '~6 sec',
-                useBackend: true, gasLimit: 1, // backend handles fee format
-                priceId: 'polkadot'
-            },
-            { 
                 id: 'cronos', name: 'Cronos', symbol: 'CRO', emoji: '⏱️', blockTime: '~5 sec',
-                useBackend: true, gasLimit: 21000,
+                rpcUrl: 'https://evm.cronos.org', gasLimit: 21000,
                 priceId: 'crypto-com-chain'
             },
             { 
                 id: 'fantom', name: 'Fantom', symbol: 'FTM', emoji: '👻', blockTime: '~1 sec',
-                useBackend: true, gasLimit: 21000,
+                rpcUrl: 'https://fantom.publicnode.com', gasLimit: 21000,
                 priceId: 'fantom'
             },
             { 
                 id: 'moonbeam', name: 'Moonbeam', symbol: 'GLMR', emoji: '🌙', blockTime: '~12 sec',
-                useBackend: true, gasLimit: 21000,
+                gasLimit: 21000,
                 priceId: 'moonbeam'
             },
             { 
                 id: 'linea', name: 'Linea', symbol: 'LINEA', emoji: '📉', blockTime: '~2 sec',
-                useBackend: true, gasLimit: 21000,
+                rpcUrl: 'https://rpc.linea.build', gasLimit: 21000,
                 priceId: 'ethereum'
             },
             { 
                 id: 'mantle', name: 'Mantle', symbol: 'MNT', emoji: '🎭', blockTime: '~2 sec',
-                useBackend: true, gasLimit: 21000,
+                rpcUrl: 'https://rpc.mantle.xyz', gasLimit: 21000,
                 priceId: 'mantle'
             },
-            { id: 'blast', name: 'Blast', symbol: 'BLAST', emoji: '💥', blockTime: '~2 sec', useBackend: true, gasLimit: 21000, priceId: 'ethereum' },
-            { id: 'zksync', name: 'zkSync', symbol: 'ZK', emoji: '⚡', blockTime: '~1 sec', useBackend: true, gasLimit: 21000, priceId: 'ethereum' },
-            { id: 'opbnb', name: 'opBNB', symbol: 'BNB', emoji: '🟡', blockTime: '~1 sec', useBackend: true, gasLimit: 21000, priceId: 'binancecoin' },
-            { id: 'polygon-zkevm', name: 'Polygon zkEVM', symbol: 'ETH', emoji: '🟣', blockTime: '~2 sec', useBackend: true, gasLimit: 21000, priceId: 'ethereum' },
-            { id: 'zetachain', name: 'ZetaChain', symbol: 'ZETA', emoji: 'Z', blockTime: '~6 sec', useBackend: true, gasLimit: 21000, priceId: 'zetachain' },
-            { id: 'flow', name: 'Flow', symbol: 'FLOW', emoji: '🌊', blockTime: '~2 sec', useBackend: true, gasLimit: 21000, priceId: 'flow' },
-            { id: 'lisk', name: 'Lisk', symbol: 'LSK', emoji: '💎', blockTime: '~10 sec', useBackend: true, gasLimit: 21000, priceId: 'lisk' },
-            { id: 'ronin', name: 'Ronin', symbol: 'RON', emoji: '⚔️', blockTime: '~3 sec', useBackend: true, gasLimit: 21000, priceId: 'ronin' },
-            { id: 'pulsechain', name: 'PulseChain', symbol: 'PLS', emoji: '❤️', blockTime: '~10 sec', useBackend: true, gasLimit: 21000, priceId: 'pulsechain' },
+            { id: 'blast', name: 'Blast', symbol: 'BLAST', emoji: '💥', blockTime: '~2 sec', rpcUrl: 'https://rpc.blast.io', gasLimit: 21000, priceId: 'ethereum' },
+            { id: 'zksync', name: 'zkSync', symbol: 'ZK', emoji: '⚡', blockTime: '~1 sec', rpcUrl: 'https://mainnet.era.zksync.io', gasLimit: 21000, priceId: 'ethereum' },
+            { id: 'opbnb', name: 'opBNB', symbol: 'BNB', emoji: '🟡', blockTime: '~1 sec', rpcUrl: 'https://opbnb-mainnet-rpc.bnbchain.org', gasLimit: 21000, priceId: 'binancecoin' },
+            { id: 'polygon-zkevm', name: 'Polygon zkEVM', symbol: 'ETH', emoji: '🟣', blockTime: '~2 sec', rpcUrl: 'https://zkevm-rpc.com', gasLimit: 21000, priceId: 'ethereum' },
+            { id: 'zetachain', name: 'ZetaChain', symbol: 'ZETA', emoji: 'Z', blockTime: '~6 sec', rpcUrl: 'https://zetachain-evm.blockpi.network/v1/rpc/public', gasLimit: 21000, priceId: 'zetachain' },
+            { id: 'flow', name: 'Flow', symbol: 'FLOW', emoji: '🌊', blockTime: '~2 sec', rpcUrl: 'https://mainnet.evm.nodes.onflow.org', gasLimit: 21000, priceId: 'flow' },
+            { id: 'lisk', name: 'Lisk', symbol: 'LSK', emoji: '💎', blockTime: '~10 sec', rpcUrl: 'https://rpc.api.lisk.com', gasLimit: 21000, priceId: 'lisk' },
+            { id: 'ronin', name: 'Ronin', symbol: 'RON', emoji: '⚔️', blockTime: '~3 sec', rpcUrl: 'https://api.roninchain.com/rpc', gasLimit: 21000, priceId: 'ronin' },
+            { id: 'pulsechain', name: 'PulseChain', symbol: 'PLS', emoji: '❤️', blockTime: '~10 sec', rpcUrl: 'https://rpc.pulsechain.com', gasLimit: 21000, priceId: 'pulsechain' },
             { 
                 id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: 'Ξ', blockTime: '~12 sec',
                 rpcUrl: 'https://ethereum.publicnode.com', gasLimit: 21000,
@@ -352,7 +347,7 @@
                     ...chain,
                     avg: fee,
                     med: fee,
-                    source: chain.useBackend ? 'Moralis' : 'PublicNode'
+                    source: 'Public RPC'
                 };
             } catch(e) {
                 console.warn(`${chain.id} RPC error:`, e);
