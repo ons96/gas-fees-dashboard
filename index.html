@@ -94,7 +94,7 @@
             },
             { 
                 id: 'moonbeam', name: 'Moonbeam', symbol: 'GLMR', emoji: '🌙', blockTime: '~12 sec',
-                gasLimit: 21000,
+                rpcUrl: 'https://rpc.api.moonbeam.network', gasLimit: 21000,
                 priceId: 'moonbeam'
             },
             { 
@@ -227,7 +227,21 @@
             return result;
         }
 
+
         // ============ UTILITIES ============
+        
+        async function fetchWithTimeout(resource, options = {}) {
+            const { timeout = 8000 } = options;
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            const response = await window.fetch(resource, {
+                ...options,
+                signal: controller.signal
+            });
+            clearTimeout(id);
+            return response;
+        }
+
         
         const colorClass = (v) => {
             if (v == null || isNaN(v)) return 'text-slate-500';
@@ -249,7 +263,7 @@
         async function getPrices() {
             try {
                 const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network', 'binancecoin', 'avalanche-2', 'arbitrum', 'optimism', 'base', 'celo', 'gnosis', 'solana', 'algorand', 'crypto-com-chain', 'fantom', 'moonbeam', 'mantle', 'zetachain', 'flow', 'lisk', 'ronin', 'pulsechain'];
-                const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
+                const r = await fetchWithTimeout(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
                 prices = await r.json();
                 return prices;
             } catch(e) {
@@ -261,7 +275,7 @@
         async function getBlockchair() {
             const fees = {};
             try {
-                const r = await fetch('https://api.blockchair.com/stats');
+                const r = await fetchWithTimeout('https://api.blockchair.com/stats');
                 const j = await r.json();
                 
                 for (let c of BLOCKCHAIR_CHAINS) {
@@ -306,7 +320,7 @@
                 let r, j, wei, ethAmount;
                 
                 if (chain.useBackend) {
-                    r = await fetch(`/api/gas?chain=${chain.id}`);
+                    r = await fetchWithTimeout(`/api/gas?chain=${chain.id}`);
                     j = await r.json();
                     if (!j.gasPriceWei) return null;
                     
@@ -317,7 +331,7 @@
                         ethAmount = (wei * chain.gasLimit) / 1e18;
                     }
                 } else {
-                    r = await fetch(chain.rpcUrl, {
+                    r = await fetchWithTimeout(chain.rpcUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -353,7 +367,7 @@
 
         async function getSolana() {
             try {
-                const r = await fetch('https://solanacompass.com/api/fees');
+                const r = await fetchWithTimeout('https://solanacompass.com/api/fees');
                 const j = await r.json();
                 const mainnet = j['1'];
                 if (!mainnet) return null;
@@ -379,7 +393,7 @@
 
         async function getAlgorand() {
             try {
-                const r = await fetch('https://mainnet-api.algonode.cloud/v2/transactions/params');
+                const r = await fetchWithTimeout('https://mainnet-api.algonode.cloud/v2/transactions/params');
                 const j = await r.json();
                 // Fee is in microAlgos (1 ALGO = 1,000,000 microAlgos)
                 const microAlgos = j['min-fee'] || j['fee'] || 1000;
@@ -404,7 +418,7 @@
         async function load() {
             if (loading) return;
             loading = true;
-            document.getElementById('loading').classList.remove('hidden');
+            if (!data.length) document.getElementById('loading').classList.remove('hidden');
             document.getElementById('status').textContent = 'Fetching...';
             
             try {
