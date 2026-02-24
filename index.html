@@ -112,6 +112,15 @@
                 useBackend: true, gasLimit: 21000,
                 priceId: 'mantle'
             },
+            { id: 'blast', name: 'Blast', symbol: 'BLAST', emoji: '💥', blockTime: '~2 sec', useBackend: true, gasLimit: 21000, priceId: 'ethereum' },
+            { id: 'zksync', name: 'zkSync', symbol: 'ZK', emoji: '⚡', blockTime: '~1 sec', useBackend: true, gasLimit: 21000, priceId: 'ethereum' },
+            { id: 'opbnb', name: 'opBNB', symbol: 'BNB', emoji: '🟡', blockTime: '~1 sec', useBackend: true, gasLimit: 21000, priceId: 'binancecoin' },
+            { id: 'polygon-zkevm', name: 'Polygon zkEVM', symbol: 'ETH', emoji: '🟣', blockTime: '~2 sec', useBackend: true, gasLimit: 21000, priceId: 'ethereum' },
+            { id: 'zetachain', name: 'ZetaChain', symbol: 'ZETA', emoji: 'Z', blockTime: '~6 sec', useBackend: true, gasLimit: 21000, priceId: 'zetachain' },
+            { id: 'flow', name: 'Flow', symbol: 'FLOW', emoji: '🌊', blockTime: '~2 sec', useBackend: true, gasLimit: 21000, priceId: 'flow' },
+            { id: 'lisk', name: 'Lisk', symbol: 'LSK', emoji: '💎', blockTime: '~10 sec', useBackend: true, gasLimit: 21000, priceId: 'lisk' },
+            { id: 'ronin', name: 'Ronin', symbol: 'RON', emoji: '⚔️', blockTime: '~3 sec', useBackend: true, gasLimit: 21000, priceId: 'ronin' },
+            { id: 'pulsechain', name: 'PulseChain', symbol: 'PLS', emoji: '❤️', blockTime: '~10 sec', useBackend: true, gasLimit: 21000, priceId: 'pulsechain' },
             { 
                 id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: 'Ξ', blockTime: '~12 sec',
                 rpcUrl: 'https://ethereum.publicnode.com', gasLimit: 21000,
@@ -247,7 +256,7 @@
                 const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 
                              'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network',
                              'binancecoin', 'avalanche-2', 'arbitrum', 'optimism', 'base', 'celo', 'gnosis',
-                             'solana', 'algorand', 'polkadot', 'crypto-com-chain', 'fantom', 'moonbeam', 'mantle'];
+                             'solana', 'algorand', 'polkadot', 'crypto-com-chain', 'fantom', 'moonbeam', 'mantle', 'zetachain', 'flow', 'lisk', 'ronin', 'pulsechain'];
                              'solana', 'algorand'];
                 const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
                 prices = await r.json();
