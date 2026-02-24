@@ -103,6 +103,16 @@
                 priceId: 'moonbeam'
             },
             { 
+                id: 'linea', name: 'Linea', symbol: 'LINEA', emoji: '📉', blockTime: '~2 sec',
+                useBackend: true, gasLimit: 21000,
+                priceId: 'ethereum'
+            },
+            { 
+                id: 'mantle', name: 'Mantle', symbol: 'MNT', emoji: '🎭', blockTime: '~2 sec',
+                useBackend: true, gasLimit: 21000,
+                priceId: 'mantle'
+            },
+            { 
                 id: 'ethereum', name: 'Ethereum', symbol: 'ETH', emoji: 'Ξ', blockTime: '~12 sec',
                 rpcUrl: 'https://ethereum.publicnode.com', gasLimit: 21000,
                 priceId: 'ethereum'
@@ -237,6 +247,7 @@
                 const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 
                              'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network',
                              'binancecoin', 'avalanche-2', 'arbitrum', 'optimism', 'base', 'celo', 'gnosis',
+                             'solana', 'algorand', 'polkadot', 'crypto-com-chain', 'fantom', 'moonbeam', 'mantle'];
                              'solana', 'algorand'];
                 const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
                 prices = await r.json();
