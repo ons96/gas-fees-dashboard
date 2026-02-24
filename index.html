@@ -248,11 +248,7 @@
 
         async function getPrices() {
             try {
-                const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 
-                             'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network',
-                             'binancecoin', 'avalanche-2', 'arbitrum', 'optimism', 'base', 'celo', 'gnosis',
-                             'solana', 'algorand', 'polkadot', 'crypto-com-chain', 'fantom', 'moonbeam', 'mantle', 'zetachain', 'flow', 'lisk', 'ronin', 'pulsechain'];
-                             'solana', 'algorand'];
+                const ids = ['bitcoin', 'litecoin', 'dogecoin', 'bitcoin-cash', 'dash', 'ripple', 'stellar', 'monero', 'cardano', 'zcash', 'ecash', 'groestlcoin', 'ethereum', 'matic-network', 'binancecoin', 'avalanche-2', 'arbitrum', 'optimism', 'base', 'celo', 'gnosis', 'solana', 'algorand', 'crypto-com-chain', 'fantom', 'moonbeam', 'mantle', 'zetachain', 'flow', 'lisk', 'ronin', 'pulsechain'];
                 const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`);
                 prices = await r.json();
                 return prices;
